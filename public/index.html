@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>مانیتور قلب</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      color: white;
+    }
+
+    h1 {
+      font-size: 26px;
+      margin-bottom: 30px;
+      color: #eee;
+      letter-spacing: 1px;
+    }
+
+    .cards {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 25px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      padding: 30px 40px;
+      border-radius: 20px;
+      text-align: center;
+      min-width: 180px;
+    }
+
+    .card h2 {
+      font-size: 16px;
+      color: #aaa;
+      margin-bottom: 15px;
+    }
+
+    .value {
+      font-size: 64px;
+      font-weight: bold;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .unit {
+      font-size: 16px;
+      color: #888;
+    }
+
+    .bpm-val  { color: #ff5252; }
+    .spo2-val { color: #40c4ff; }
+
+    /* انیمیشن ضربان */
+    @keyframes beat {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    .beating { animation: beat 0.5s ease; }
+
+    .status {
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      text-align: center;
+      transition: all 0.3s;
+    }
+    .online  { background: rgba(76,175,80,0.2);  border: 1px solid #4CAF50; color: #4CAF50; }
+    .offline { background: rgba(244,67,54,0.2);  border: 1px solid #f44336; color: #f44336; }
+    .warning { background: rgba(255,152,0,0.2);  border: 1px solid #ff9800; color: #ff9800; }
+
+    .last-update {
+      margin-top: 15px;
+      font-size: 12px;
+      color: #555;
+    }
+
+    /* رنگ کارت بر اساس وضعیت SpO2 */
+    .spo2-normal   { border-color: rgba(64,196,255,0.3); }
+    .spo2-warning  { border-color: rgba(255,152,0,0.5); }
+    .spo2-danger   { border-color: rgba(244,67,54,0.5); }
+  </style>
+</head>
+<body>
+
+  <h1>❤️ مانیتور قلب و اکسیژن خون</h1>
+
+  <div class="cards">
+
+    <!-- کارت ضربان قلب -->
+    <div class="card" id="bpmCard">
+      <h2>💓 ضربان قلب</h2>
+      <div class="value bpm-val" id="bpm">--</div>
+      <div class="unit">BPM</div>
+    </div>
+
+    <!-- کارت اکسیژن خون -->
+    <div class="card" id="spo2Card">
+      <h2>🩸 اکسیژن خون</h2>
+      <div class="value spo2-val" id="spo2">--</div>
+      <div class="unit">درصد (SpO2)</div>
+    </div>
+
+  </div>
+
+  <!-- وضعیت -->
+  <div class="status offline" id="statusBox">
+    ⏳ در حال اتصال...
+  </div>
+
+  <!-- آخرین آپدیت -->
+  <div class="last-update" id="lastUpdate"></div>
+
+  <script>
+    let lastBpm = 0;
+
+    async function fetchData() {
+      try {
+        const res = await fetch('/sensor');
+        const data = await res.json();
+
+        const statusBox = document.getElementById('statusBox');
+        const bpmEl     = document.getElementById('bpm');
+        const spo2El    = document.getElementById('spo2');
+        const spo2Card  = document.getElementById('spo2Card');
+        const lastUpEl  = document.getElementById('lastUpdate');
+
+        // ضربان قلب
+        if (data.validBpm && data.bpm > 0) {
+          bpmEl.innerText = data.bpm;
+
+          // انیمیشن ضربان
+          if (data.bpm !== lastBpm) {
+            bpmEl.classList.remove('beating');
+            void bpmEl.offsetWidth;
+            bpmEl.classList.add('beating');
+            lastBpm = data.bpm;
+          }
+        } else {
+          bpmEl.innerText = '--';
+        }
+
+        // اکسیژن خون
+        if (data.validSpo2 && data.spo2 > 0) {
+          spo2El.innerText = data.spo2 + '%';
+
+          // رنگ بر اساس مقدار
+          spo2Card.className = 'card';
+          if (data.spo2 >= 95) {
+            spo2Card.classList.add('spo2-normal');
+          } else if (data.spo2 >= 90) {
+            spo2Card.classList.add('spo2-warning');
+          } else {
+            spo2Card.classList.add('spo2-danger');
+          }
+        } else {
+          spo2El.innerText = '--%';
+        }
+
+        // وضعیت
+        if (!data.validBpm && !data.validSpo2) {
+          statusBox.className = 'status warning';
+          statusBox.innerText = '⚠️ انگشت رو روی سنسور بذار';
+        } else if (data.bpm === 0 && data.spo2 === 0) {
+          statusBox.className = 'status offline';
+          statusBox.innerText = '❌ ESP32 آنلاین نیست';
+        } else {
+          statusBox.className = 'status online';
+          statusBox.innerText = '✅ متصل - داده دریافت میشه';
+        }
+
+        // آخرین آپدیت
+        if (data.lastUpdate) {
+          const d = new Date(data.lastUpdate);
+          lastUpEl.innerText = 'آخرین آپدیت: ' + d.toLocaleTimeString('fa-IR');
+        }
+
+      } catch(e) {
+        document.getElementById('statusBox').className = 'status offline';
+        document.getElementById('statusBox').innerText = '❌ خطا در اتصال به سرور';
+      }
+    }
+
+    setInterval(fetchData, 2000);
+    fetchData();
+  </script>
+
+</body>
+</html>
